@@ -1,0 +1,17 @@
+# Model Registry
+
+# Default model for all agents if not overridden per-agent.
+default: omnira-lite-qwen-3b-v0.1
+
+# Per-agent overrides (optional)
+agents:
+  coder: omnira-code-qwen-coder-7b-v0.1
+  infra: omnira-platform-qwen-7b-v0.1
+  planner: omnira-platform-qwen-7b-v0.1
+  docs: omnira-research-qwen-14b-v0.1
+  monitor: omnira-platform-qwen-7b-v0.1
+  qa: omnira-code-qwen-coder-7b-v0.1
+  security: omnira-shield-qwen-7b-v0.1
+  release: omnira-platform-qwen-7b-v0.1
+  research: omnira-research-qwen-14b-v0.1
+  data: omnira-research-qwen-14b-v0.1

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "docs_setup_guide",
+    "agent": "docs",
+    "task": "Write a setup guide for this repo.",
+    "expect": ["Prerequisites", "OpenAI API key", "pip install -e ."]
+  },
+  {
+    "id": "agents_list",
+    "agent": "planner",
+    "task": "List the available agents and what they do.",
+    "expect": ["coder", "infra", "docs", "monitor", "planner"]
+  },
+  {
+    "id": "data_location",
+    "agent": "planner",
+    "task": "Where are run logs and memory stored?",
+    "expect": ["data/", "runs", "memory"]
+  }
+]

@@ -1,0 +1,31 @@
+base_models:
+  - id: qwen-lite-local
+    family: qwen
+    size: 3b
+    runtime: ollama
+    status: placeholder
+    notes: Local fast daily assistant base model.
+  - id: qwen-code-local
+    family: qwen-coder
+    size: 7b
+    runtime: ollama
+    status: placeholder
+    notes: Local coding assistant base model.
+  - id: qwen-platform-local
+    family: qwen
+    size: 7b
+    runtime: ollama
+    status: placeholder
+    notes: Local infrastructure and platform base model.
+  - id: qwen-research-cloud
+    family: qwen
+    size: 14b
+    runtime: external
+    status: placeholder
+    notes: Research-oriented larger model before self-hosted rollout.
+  - id: qwen-prime-cloud-placeholder
+    family: qwen
+    size: 32b
+    runtime: external
+    status: placeholder
+    notes: Future orchestration-grade model placeholder.

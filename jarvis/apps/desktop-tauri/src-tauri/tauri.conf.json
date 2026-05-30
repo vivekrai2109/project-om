@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jarvis Commander",
+  "version": "0.1.0",
+  "identifier": "com.omnira.jarvis.commander",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5174"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Jarvis Commander",
+        "width": 1520,
+        "height": 940,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true
+      }
+    ]
+  }
+}

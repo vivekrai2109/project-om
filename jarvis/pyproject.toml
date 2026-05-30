@@ -1,0 +1,34 @@
+[project]
+name = "agent-hub"
+version = "0.1.0"
+description = "Personal multi-agent orchestrator (local-first)."
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "Proprietary"}
+authors = [{name = "You"}]
+dependencies = [
+  "openai>=1.40.0",
+  "typer>=0.12.0",
+  "pyyaml>=6.0.1",
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+voice = [
+  "numpy>=2.0.0",
+  "sounddevice>=0.4.7",
+]
+desktop = [
+  "PySide6>=6.8.0",
+]
+
+[project.scripts]
+agenthub = "agenthub.cli:app"
+
+[tool.setuptools]
+packages = ["agenthub"]
+
+[tool.pytest.ini_options]
+addopts = "-q"

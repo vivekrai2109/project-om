@@ -1,0 +1,21 @@
+tools:
+  - name: fs_read
+    description: Read files for context or analysis.
+    risk: low
+    default_allowed_agents: [coder, docs, planner, research, qa, security, data]
+  - name: fs_write
+    description: Write or modify files.
+    risk: medium
+    default_allowed_agents: [coder, docs, infra, release]
+  - name: shell
+    description: Execute shell commands.
+    risk: high
+    default_allowed_agents: [infra, coder]
+  - name: web
+    description: Web search and retrieval.
+    risk: medium
+    default_allowed_agents: [research, planner, docs]
+  - name: git
+    description: Git operations (status, diff, commit).
+    risk: medium
+    default_allowed_agents: [coder, release]

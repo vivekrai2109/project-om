@@ -1,0 +1,12 @@
+model: omnira-lite-qwen-3b-v0.1
+reasoning_effort: medium
+max_output_tokens: 1024
+request_timeout_s: 300
+retry_max_attempts: 3
+retry_backoff_s: 2
+backend: omnira  # openai, local, or omnira
+base_url: "http://127.0.0.1:8001"     # for local or omnira servers
+api_key_env: OPENAI_API_KEY
+tracing:
+  enabled: true
+  sample_rate: 1.0

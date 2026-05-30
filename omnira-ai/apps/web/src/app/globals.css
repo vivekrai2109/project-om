@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "../styles/theme.css";
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(110, 212, 255, 0.22), transparent 35%),
+    radial-gradient(circle at top right, rgba(255, 143, 92, 0.16), transparent 28%),
+    linear-gradient(160deg, #f5fbff 0%, #eef7f2 45%, #fff5ee 100%);
+  color: var(--omnira-ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

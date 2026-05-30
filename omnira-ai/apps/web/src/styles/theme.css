@@ -1,0 +1,10 @@
+:root {
+  --omnira-ink: #09111f;
+  --omnira-subtle: #607087;
+  --omnira-line: rgba(9, 17, 31, 0.1);
+  --omnira-surface: rgba(255, 255, 255, 0.72);
+  --omnira-surface-strong: rgba(255, 255, 255, 0.88);
+  --omnira-horizon: #6ed4ff;
+  --omnira-ember: #ff8f5c;
+  --omnira-moss: #8fe388;
+}

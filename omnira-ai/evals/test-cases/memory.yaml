@@ -1,0 +1,2 @@
+name: memory
+description: Validate memory save, retrieval, and context recall behavior.

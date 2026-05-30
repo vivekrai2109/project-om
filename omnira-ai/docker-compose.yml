@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./apps/api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      API_PORT: ${API_PORT:-8000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://omnira:omnira@postgres:5432/omnira}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-omnira-lite-qwen-3b-v0.1}
+      ENABLE_EXTERNAL_PROVIDERS: ${ENABLE_EXTERNAL_PROVIDERS:-false}
+      ENABLE_TOOL_EXECUTION: ${ENABLE_TOOL_EXECUTION:-false}
+      REQUIRE_APPROVAL_FOR_TOOLS: ${REQUIRE_APPROVAL_FOR_TOOLS:-true}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./apps/api:/app
+    working_dir: /app
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    build:
+      context: ./apps/web
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_PORT:-8000}
+      PORT: ${WEB_PORT:-3000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    working_dir: /app
+    depends_on:
+      - api
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: omnira
+      POSTGRES_USER: omnira
+      POSTGRES_PASSWORD: omnira
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+
+# TODO: add optional Ollama service for local model runtime when the MVP moves beyond mock providers.
+# TODO: add optional vLLM service for self-hosted inference once GPU deployment is part of the roadmap.

@@ -1,0 +1,41 @@
+omnira_models:
+  - id: omnira-lite-qwen-3b-v0.1
+    display_name: OMNIRA Lite 3B v0.1
+    base_model: qwen-lite-local
+    domain: daily-assistant
+    status: design
+  - id: omnira-code-qwen-coder-7b-v0.1
+    display_name: OMNIRA Code 7B v0.1
+    base_model: qwen-code-local
+    domain: coding
+    status: design
+  - id: omnira-platform-qwen-7b-v0.1
+    display_name: OMNIRA Platform 7B v0.1
+    base_model: qwen-platform-local
+    domain: platform
+    status: target-internal
+  - id: omnira-bharat-qwen-7b-v0.1
+    display_name: OMNIRA Bharat 7B v0.1
+    base_model: qwen-platform-local
+    domain: india-language-context
+    status: design
+  - id: omnira-coach-qwen-7b-v0.1
+    display_name: OMNIRA Coach 7B v0.1
+    base_model: qwen-platform-local
+    domain: coaching
+    status: design
+  - id: omnira-research-qwen-14b-v0.1
+    display_name: OMNIRA Research 14B v0.1
+    base_model: qwen-research-cloud
+    domain: research
+    status: design
+  - id: omnira-shield-qwen-7b-v0.1
+    display_name: OMNIRA Shield 7B v0.1
+    base_model: qwen-platform-local
+    domain: defensive-security
+    status: design
+  - id: omnira-trade-qwen-7b-v0.1
+    display_name: OMNIRA Trade 7B v0.1
+    base_model: qwen-platform-local
+    domain: trading-research
+    status: design

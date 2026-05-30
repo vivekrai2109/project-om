@@ -1,0 +1,13 @@
+deployment_targets:
+  - id: local-ollama
+    provider: ollama
+    purpose: local-development
+    status: planned
+  - id: self-hosted-vllm
+    provider: vllm
+    purpose: private-inference
+    status: planned
+  - id: external-provider-bridge
+    provider: external
+    purpose: temporary-provider-independent-assist
+    status: optional

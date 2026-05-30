@@ -1,0 +1,20 @@
+[
+  {
+    "id": "infra_env_sanity",
+    "agent": "infra",
+    "task": "Provide a minimal Docker Compose + .env setup for a local service and list common infra pitfalls.",
+    "expect": ["Docker", "env", "ports"]
+  },
+  {
+    "id": "coder_fix_bug",
+    "agent": "coder",
+    "task": "Given a Python function that divides by zero on empty input, propose a fix and a unit test.",
+    "expect": ["test", "zero", "fix"]
+  },
+  {
+    "id": "infra_ci",
+    "agent": "infra",
+    "task": "Describe a basic CI pipeline for lint, tests, and build.",
+    "expect": ["lint", "test", "build"]
+  }
+]

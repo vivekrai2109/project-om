@@ -1,0 +1,44 @@
+profiles:
+  - name: personal
+    description: Personal device usage with broader local workflow access.
+    default_risk: medium
+    require_approval_for:
+      - shell
+      - fs_write
+      - web
+    allowed_paths:
+      - ~/Documents
+      - ~/Downloads
+      - ~/Projects
+      - ~/Project OM
+    allowed_apps:
+      - code
+      - browser
+      - terminal
+      - notes
+    allowed_commands:
+      - git status
+      - git diff
+      - python -m
+    recording_requires_consent: true
+
+  - name: work
+    description: Work usage with tighter boundaries and explicit approval defaults.
+    default_risk: high
+    require_approval_for:
+      - shell
+      - fs_write
+      - web
+      - git
+    allowed_paths:
+      - ~/Work
+      - ~/Projects
+      - ~/Project OM
+    allowed_apps:
+      - code
+      - browser
+      - terminal
+    allowed_commands:
+      - git status
+      - git diff
+    recording_requires_consent: true

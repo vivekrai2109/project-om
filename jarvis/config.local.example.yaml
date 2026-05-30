@@ -1,0 +1,12 @@
+backend: local
+base_url: "http://<AZURE_VM_IP>:8000/v1"
+api_key_env: OPENAI_API_KEY
+model: gpt-oss-20b
+reasoning_effort: medium
+max_output_tokens: 1024
+request_timeout_s: 120
+retry_max_attempts: 3
+retry_backoff_s: 2
+tracing:
+  enabled: true
+  sample_rate: 1.0
