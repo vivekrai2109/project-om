@@ -1,4 +1,9 @@
+from __future__ import annotations
+
+import json
+
 from fastapi import FastAPI, Query
+from fastapi.responses import StreamingResponse
 
 from app.agents.service import AgentService
 from app.chat.orchestrator import OmniraPrimeOrchestrator
@@ -50,6 +55,52 @@ def chat(request: ChatRequest) -> ChatResponse:
     )
 
 
+@app.post("/chat/stream")
+def chat_stream(request: ChatRequest) -> StreamingResponse:
+    def generate():
+        accumulated_reply = ""
+        for event, state in prime.stream(
+            request.message,
+            request.conversation_id,
+            request.metadata,
+            request.system_prompt,
+            request.preferred_model,
+            request.preferred_agent,
+        ):
+            if event.delta:
+                accumulated_reply += event.delta
+            payload = {
+                "delta": event.delta,
+                "done": event.done,
+                "reply_text": event.metadata.get("reply_text") or accumulated_reply,
+                "speech_text": event.metadata.get("speech_text") or accumulated_reply,
+                "state": event.metadata.get("state") or ("approval_required" if state["requires_approval"] else "speaking"),
+                "intent": state.get("intent", ""),
+                "model": event.model_used,
+                "provider": event.provider,
+                "agent": state["agent"],
+                "confidence": state.get("confidence", 0.0),
+                "decision_path": state["decision_path"],
+                "memory_hits": state.get("memory_hits", []),
+                "tool_calls": state.get("tool_calls", []),
+                "workflow_trace": state.get("workflow_trace", []),
+                "visualization": state.get("visualization", {}),
+                "safety_flags": state["safety_flags"],
+                "approval_required": state["requires_approval"],
+                "risk_level": state.get("risk_level", "low"),
+                "error": event.metadata.get("error"),
+                "metadata": {
+                    "conversation_id": state["conversation_id"],
+                    "matched_keywords": state["matched_keywords"],
+                    "requires_approval": state["requires_approval"],
+                    **event.metadata,
+                },
+            }
+            yield json.dumps(payload) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
 @app.get("/models")
 def list_models() -> list[dict[str, str]]:
     return model_service.list_models()
@@ -57,7 +108,7 @@ def list_models() -> list[dict[str, str]]:
 
 @app.post("/models/route", response_model=RouteResponse)
 def route_model(request: RouteRequest) -> RouteResponse:
-    return model_router.route(request.message)
+    return model_router.route(request.message, request.metadata)
 
 
 @app.post("/memory/save")

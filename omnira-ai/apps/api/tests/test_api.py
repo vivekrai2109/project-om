@@ -22,6 +22,31 @@ def test_route_endpoint_prefers_platform_for_azure_text() -> None:
     assert response.json()["agent"] in {"omnira-platform", "omnira-prime"}
 
 
+def test_route_endpoint_uses_reasoning_model_for_complex_planning() -> None:
+    response = client.post(
+        "/models/route",
+        json={"message": "Plan and orchestrate a complex repo migration and compare rollout options"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["agent"] == "omnira-prime"
+    assert payload["model"] == "omnira-reasoning-qwen-7b-v0.1"
+
+
+def test_route_endpoint_honors_pinned_model_metadata() -> None:
+    response = client.post(
+        "/models/route",
+        json={
+            "message": "Plan and orchestrate a complex repo migration and compare rollout options",
+            "metadata": {"pinned_model": "omnira-platform-qwen-7b-v0.1"},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model"] == "omnira-platform-qwen-7b-v0.1"
+    assert payload["agent"] == "omnira-platform"
+
+
 def test_chat_endpoint_returns_metadata() -> None:
     response = client.post("/chat", json={"message": "Summarize my repo health"})
     assert response.status_code == 200
@@ -29,6 +54,19 @@ def test_chat_endpoint_returns_metadata() -> None:
     assert payload["response"]
     assert payload["agent"]
     assert payload["model"]
+
+
+def test_chat_endpoint_honors_lean_compute_mode_metadata() -> None:
+    response = client.post(
+        "/chat",
+        json={
+            "message": "Research and analyze this repo architecture",
+            "metadata": {"source": "jarvis", "compute_mode": "lean"},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model"] == "omnira-lite-qwen-3b-v0.1"
 
 
 def test_chat_endpoint_allows_preferred_model_and_agent() -> None:
@@ -83,6 +121,7 @@ def test_models_endpoint_exposes_full_catalog() -> None:
     model_ids = {item["id"] for item in payload}
     assert "omnira-lite-qwen-3b-v0.1" in model_ids
     assert "omnira-code-qwen-coder-7b-v0.1" in model_ids
+    assert "omnira-reasoning-qwen-7b-v0.1" in model_ids
     assert "omnira-research-qwen-14b-v0.1" in model_ids
     lite_entry = next(item for item in payload if item["id"] == "omnira-lite-qwen-3b-v0.1")
     assert lite_entry["role"] == "personal-assistant"
@@ -168,6 +207,36 @@ def test_ollama_provider_uses_fast_profile_for_lite(monkeypatch) -> None:
     monkeypatch.delenv("OLLAMA_FAST_MODEL", raising=False)
     monkeypatch.delenv("OLLAMA_FAST_MAX_TOKENS", raising=False)
     monkeypatch.delenv("OLLAMA_FAST_NUM_CTX", raising=False)
+    get_settings.cache_clear()
+
+
+def test_ollama_provider_uses_reasoning_profile(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_REASONING_MODEL", "qwen2.5:7b")
+    monkeypatch.setenv("OLLAMA_REASONING_MAX_TOKENS", "900")
+    monkeypatch.setenv("OLLAMA_REASONING_NUM_CTX", "6144")
+    get_settings.cache_clear()
+    provider = OllamaProvider(get_settings())
+    captured: dict[str, object] = {}
+
+    def fake_post_chat(payload):
+        captured.update(payload)
+        return {
+            "message": {"content": "reasoning response"},
+            "prompt_eval_count": 14,
+            "eval_count": 20,
+            "done": True,
+        }
+
+    monkeypatch.setattr(provider, "_post_chat", fake_post_chat)
+    response = provider.generate(ModelRequest(prompt="plan a migration", model="omnira-reasoning-qwen-7b-v0.1", max_tokens=5000))
+
+    assert captured["model"] == "qwen2.5:7b"
+    assert captured["options"]["num_predict"] == 900
+    assert captured["options"]["num_ctx"] == 6144
+    assert response.metadata["ollama_profile"] == "reasoning"
+    monkeypatch.delenv("OLLAMA_REASONING_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_REASONING_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("OLLAMA_REASONING_NUM_CTX", raising=False)
     get_settings.cache_clear()
 
 

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import base64
+from collections import deque
 from dataclasses import asdict, dataclass
 import json
+import math
+import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+from typing import Callable
 import wave
 
-from .config import data_dir
+from .config import data_dir, load_config
 
 
 VOICE_DIR = data_dir() / "voice"
@@ -152,11 +157,11 @@ Add-Type -AssemblyName System.Speech
 
 def get_speech_mode_config() -> SpeechModeConfig:
     if not SPEECH_MODE_PATH.exists():
-        return SpeechModeConfig(language_mode="english", provider="windows_dictation", culture="auto")
+        return SpeechModeConfig(language_mode="english", provider="auto", culture="auto")
     data = json.loads(SPEECH_MODE_PATH.read_text(encoding="utf-8"))
     return SpeechModeConfig(
         language_mode=_normalize_language_mode(data.get("language_mode", "english")),
-        provider=_normalize_provider(data.get("provider", "windows_dictation")),
+        provider=_normalize_provider(data.get("provider", "auto")),
         culture=_normalize_culture(data.get("culture", "auto")),
     )
 
@@ -181,10 +186,15 @@ def speech_mode_status() -> dict[str, object]:
     cfg = get_speech_mode_config()
     recognizers = list_windows_recognizers() if sys.platform.startswith("win") else []
     recognizer_cultures = {item.culture for item in recognizers}
-    resolved_culture, availability, detail = _resolve_recognition_plan(cfg, recognizer_cultures)
+    active_provider = resolve_speech_provider(cfg)
+    effective_cfg = SpeechModeConfig(language_mode=cfg.language_mode, provider=active_provider, culture=cfg.culture)
+    resolved_culture, availability, detail = _resolve_recognition_plan(effective_cfg, recognizer_cultures)
+    if cfg.provider == "auto":
+        detail = f"Auto mode selected {active_provider}. {detail}"
     return {
         "language_mode": cfg.language_mode,
         "provider": cfg.provider,
+        "active_provider": active_provider,
         "configured_culture": cfg.culture,
         "resolved_culture": resolved_culture,
         "availability": availability,
@@ -201,10 +211,45 @@ def _normalize_language_mode(value: object) -> str:
 
 
 def _normalize_provider(value: object) -> str:
-    normalized = str(value or "windows_dictation").strip().lower()
+    normalized = str(value or "auto").strip().lower()
     if normalized not in {"windows_dictation", "openai_audio", "auto"}:
         raise ValueError("provider must be one of: windows_dictation, openai_audio, auto")
     return normalized
+
+
+def _remote_audio_available() -> bool:
+    cfg = load_config()
+    api_key = os.environ.get(cfg.api_key_env, "") or os.environ.get("OPENAI_API_KEY", "")
+    return bool(str(api_key).strip())
+
+
+def resolve_speech_provider(
+    cfg: SpeechModeConfig | None = None,
+    *,
+    prefer_realtime: bool = False,
+) -> str:
+    speech_cfg = cfg or get_speech_mode_config()
+    if speech_cfg.provider != "auto":
+        return speech_cfg.provider
+
+    recognizers = list_windows_recognizers() if sys.platform.startswith("win") else []
+    recognizer_cultures = {item.culture for item in recognizers}
+    local_cfg = SpeechModeConfig(
+        language_mode=speech_cfg.language_mode,
+        provider="windows_dictation",
+        culture=speech_cfg.culture,
+    )
+    _, local_availability, _ = _resolve_recognition_plan(local_cfg, recognizer_cultures)
+    local_ready = local_availability in {"ready", "limited"}
+    remote_ready = _remote_audio_available()
+
+    if prefer_realtime and local_ready:
+        return "windows_dictation"
+    if remote_ready:
+        return "openai_audio"
+    if local_ready:
+        return "windows_dictation"
+    return "openai_audio" if remote_ready else "windows_dictation"
 
 
 def _normalize_culture(value: object) -> str:
@@ -288,19 +333,34 @@ def _powershell_script_output(script: str, timeout_s: float) -> str:
 
 def transcribe_microphone_input(
     duration_s: float = 5.0,
-    provider: str = "windows_dictation",
+    provider: str = "auto",
     allow_empty: bool = False,
+    prefer_realtime: bool = False,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> TranscriptionResult:
     speech_mode = get_speech_mode_config()
-    provider = speech_mode.provider if provider == "auto" else provider
+    provider = resolve_speech_provider(speech_mode, prefer_realtime=prefer_realtime) if provider == "auto" else provider
     if provider == "windows_dictation":
         recognizer_cultures = {item.culture for item in list_windows_recognizers()}
-        culture_name, availability, detail = _resolve_recognition_plan(speech_mode, recognizer_cultures)
+        effective_cfg = SpeechModeConfig(
+            language_mode=speech_mode.language_mode,
+            provider="windows_dictation",
+            culture=speech_mode.culture,
+        )
+        culture_name, availability, detail = _resolve_recognition_plan(effective_cfg, recognizer_cultures)
         if availability not in {"ready", "limited"}:
             raise RuntimeError(detail)
-        return _transcribe_windows_dictation(duration_s, allow_empty=allow_empty, culture_name=culture_name)
+        return _transcribe_windows_dictation(
+            duration_s,
+            allow_empty=allow_empty,
+            culture_name=culture_name,
+            stop_on_silence=True,
+            progress_callback=progress_callback,
+        )
     if provider == "openai_audio":
-        recorded = record_microphone_clip(duration_s=duration_s)
+        recorded = record_microphone_clip(duration_s=duration_s, stop_on_silence=True, progress_callback=progress_callback)
+        if progress_callback is not None:
+            progress_callback("VOICE // TRANSCRIBING")
         return transcribe_file_input(str(recorded), provider=provider)
     raise ValueError(f"Unknown speech provider: {provider}")
 
@@ -310,17 +370,25 @@ def _transcribe_windows_dictation(
     *,
     allow_empty: bool = False,
     culture_name: str = "en-US",
+    stop_on_silence: bool = False,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> TranscriptionResult:
     if not sys.platform.startswith("win"):
         raise RuntimeError("Windows dictation is only available on Windows.")
 
     listen_seconds = max(2.0, float(duration_s))
     try:
-        recorded = record_microphone_clip(duration_s=listen_seconds)
+        recorded = record_microphone_clip(
+            duration_s=listen_seconds,
+            stop_on_silence=stop_on_silence,
+            progress_callback=progress_callback,
+        )
     except RuntimeError:
         recorded = None
 
     if recorded is not None:
+        if progress_callback is not None:
+            progress_callback("VOICE // TRANSCRIBING")
         return _transcribe_windows_wave_file(recorded, allow_empty=allow_empty, culture_name=culture_name)
 
     return _transcribe_windows_default_device(listen_seconds, allow_empty=allow_empty, culture_name=culture_name)
@@ -540,26 +608,28 @@ def list_input_devices() -> list[InputDevice]:
     return items
 
 
-def record_microphone_clip(duration_s: float, output_path: str | None = None) -> Path:
+def record_microphone_clip(
+    duration_s: float,
+    output_path: str | None = None,
+    *,
+    stop_on_silence: bool = False,
+    progress_callback: Callable[[str], None] | None = None,
+) -> Path:
     sd = _load_sounddevice()
     config = get_microphone_config()
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
     frames = int(duration_s * config.sample_rate)
     device = None if config.device == "default" else config.device
-    try:
-        recording = sd.rec(
-            frames,
-            samplerate=config.sample_rate,
-            channels=1,
-            dtype="int16",
-            device=device,
-        )
-    except ImportError as exc:
-        raise RuntimeError(
-            "numpy is required for live microphone recording. Run 'pip install -e .[voice]' again to install the full voice extras."
-        ) from exc
-    sd.wait()
+    recording = _capture_recording_frames(
+        sd,
+        sample_rate=config.sample_rate,
+        frames=frames,
+        chunk_ms=config.chunk_ms,
+        device=device,
+        stop_on_silence=stop_on_silence,
+        progress_callback=progress_callback,
+    )
 
     if output_path:
         target = Path(output_path).expanduser().resolve()
@@ -574,3 +644,104 @@ def record_microphone_clip(duration_s: float, output_path: str | None = None) ->
         wav_file.writeframes(recording.tobytes())
 
     return target
+
+
+def _capture_recording_frames(
+    sd,
+    *,
+    sample_rate: int,
+    frames: int,
+    chunk_ms: int,
+    device: str | None,
+    stop_on_silence: bool,
+    progress_callback: Callable[[str], None] | None,
+):
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError(
+            "numpy is required for live microphone recording. Run 'pip install -e .[voice]' again to install the full voice extras."
+        ) from exc
+
+    if not stop_on_silence:
+        if progress_callback is not None:
+            progress_callback("VOICE // LISTENING")
+        recording = sd.rec(
+            frames,
+            samplerate=sample_rate,
+            channels=1,
+            dtype="int16",
+            device=device,
+        )
+        sd.wait()
+        return recording
+
+    block_frames = max(1, int(sample_rate * max(40, chunk_ms) / 1000))
+    chunk_seconds = block_frames / float(sample_rate)
+    max_chunks = max(1, int(math.ceil(frames / block_frames)))
+    pre_roll_limit = max(2, int(math.ceil(0.25 / chunk_seconds)))
+    silence_limit = max(2, int(math.ceil(0.45 / chunk_seconds)))
+    min_speech_chunks = max(1, int(math.ceil(0.18 / chunk_seconds)))
+    amplitude_threshold = 520.0
+    max_wall_time = max(1.0, frames / float(sample_rate)) + 0.5
+
+    pre_roll: deque = deque(maxlen=pre_roll_limit)
+    captured_chunks = []
+    speech_started = False
+    speech_chunks = 0
+    trailing_silence_chunks = 0
+    started_at = time.perf_counter()
+
+    with sd.InputStream(
+        samplerate=sample_rate,
+        channels=1,
+        dtype="int16",
+        device=device,
+        blocksize=block_frames,
+    ) as stream:
+        if progress_callback is not None:
+            progress_callback("VOICE // LISTENING FOR SPEECH")
+        for _ in range(max_chunks):
+            if (time.perf_counter() - started_at) > max_wall_time:
+                break
+            chunk, overflowed = stream.read(block_frames)
+            if overflowed:
+                continue
+            chunk_copy = chunk.copy()
+            pre_roll.append(chunk_copy)
+            amplitude = float(np.abs(chunk_copy.astype(np.int32)).mean())
+            voiced = amplitude >= amplitude_threshold
+
+            if voiced and not speech_started:
+                speech_started = True
+                captured_chunks.extend(list(pre_roll))
+                speech_chunks = 1
+                trailing_silence_chunks = 0
+                if progress_callback is not None:
+                    progress_callback("VOICE // SPEECH DETECTED")
+                continue
+
+            if speech_started:
+                captured_chunks.append(chunk_copy)
+                if voiced:
+                    speech_chunks += 1
+                    trailing_silence_chunks = 0
+                    if progress_callback is not None and speech_chunks == min_speech_chunks:
+                        progress_callback("VOICE // WAITING FOR PAUSE")
+                else:
+                    trailing_silence_chunks += 1
+                    if speech_chunks >= min_speech_chunks and trailing_silence_chunks >= silence_limit:
+                        if progress_callback is not None:
+                            progress_callback("VOICE // END OF SPEECH")
+                        break
+
+    if not captured_chunks:
+        if pre_roll:
+            captured_chunks = list(pre_roll)
+        else:
+            return np.zeros((block_frames, 1), dtype="int16")
+
+    if progress_callback is not None and speech_started:
+        progress_callback("VOICE // PROCESSING CAPTURE")
+
+    return np.concatenate(captured_chunks, axis=0)

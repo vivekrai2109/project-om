@@ -79,8 +79,8 @@ The MVP should be practical on a laptop and should not require cloud hosting bey
 
 ### Desktop app
 - native desktop shell first, with cinematic presentation as a product goal
-- recommended production UI stack: `PySide6 + QML`
-- keep the current Tkinter shell only as a prototype bridge while the production shell is built
+- recommended production UI stack: `Tauri + React + WebGL/WebGPU`
+- keep the current Tkinter and Qt shells only as prototype or bridge paths while the production shell is built
 - push-to-talk control
 - session timeline and approvals panel
 

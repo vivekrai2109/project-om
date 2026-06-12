@@ -20,12 +20,15 @@ class Settings(BaseSettings):
     ollama_fast_model: str = "qwen2.5:3b"
     ollama_code_model: str | None = None
     ollama_platform_model: str | None = None
+    ollama_reasoning_model: str | None = None
     ollama_research_model: str | None = None
     ollama_keep_alive: str = "20m"
     ollama_default_num_ctx: int = 4096
     ollama_fast_num_ctx: int = 2048
+    ollama_reasoning_num_ctx: int = 8192
     ollama_default_max_tokens: int = 512
     ollama_fast_max_tokens: int = 256
+    ollama_reasoning_max_tokens: int = 1024
     ollama_research_max_tokens: int = 768
     data_dir: Path = Path(".data")
     memory_file: Path = Path(".data/memory.json")

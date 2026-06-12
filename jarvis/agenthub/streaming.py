@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Iterable
+import time
+from typing import Callable, Iterable
 
 from .agents import AgentProfile
-from .backend_client import create_openai_client, resolve_model_name, resolve_omnira_agent_name
+from .backend_client import build_routing_profile, create_openai_client, resolve_omnira_agent_name
 from .config import load_config
 from .context import build_repo_context, should_include_repo_context
 from .memory import RunRecord, project_id, load_memory, write_run, append_memory
@@ -19,9 +20,12 @@ def stream_task(
     trace: TraceContext | None = None,
     source: str | None = None,
     dynamic_routing: bool = False,
+    stream_event_callback: Callable[[object], None] | None = None,
 ) -> Iterable[str]:
+    started_at = time.time()
     cfg = load_config()
-    model = resolve_model_name(agent.name, agent.model, cfg, dynamic_routing=dynamic_routing)
+    routing_profile = build_routing_profile(agent.name, agent.model, cfg, dynamic_routing=dynamic_routing)
+    model = routing_profile.model_name
     preferred_agent = resolve_omnira_agent_name(agent.name, dynamic_routing=dynamic_routing) if cfg.backend == "omnira" else None
     client = create_openai_client(cfg)
 
@@ -41,8 +45,8 @@ def stream_task(
             stream = client.responses.create(
                 model=model,
                 input=request_input,
-                max_output_tokens=cfg.max_output_tokens,
-                reasoning={"effort": cfg.reasoning_effort},
+                max_output_tokens=routing_profile.max_output_tokens,
+                reasoning={"effort": routing_profile.reasoning_effort},
                 timeout=cfg.request_timeout_s,
                 stream=True,
                 preferred_agent=preferred_agent,
@@ -51,25 +55,44 @@ def stream_task(
             stream = client.responses.create(
                 model=model,
                 input=request_input,
-                max_output_tokens=cfg.max_output_tokens,
-                reasoning={"effort": cfg.reasoning_effort},
+                max_output_tokens=routing_profile.max_output_tokens,
+                reasoning={"effort": routing_profile.reasoning_effort},
                 timeout=cfg.request_timeout_s,
                 stream=True,
             )
 
     chunks: list[str] = []
+    first_token_ms: int | None = None
     for stream_event in stream:
+        if stream_event_callback is not None:
+            try:
+                stream_event_callback(stream_event)
+            except Exception:
+                pass
         delta = None
         if isinstance(stream_event, dict):
             delta = stream_event.get("delta") or stream_event.get("text")
         else:
             delta = getattr(stream_event, "delta", None) or getattr(stream_event, "text", None)
         if delta:
+            if first_token_ms is None:
+                first_token_ms = int((time.time() - started_at) * 1000)
+                event(trace_ctx, "stream.first_token", {"latency_ms": first_token_ms, "model": model or "dynamic"})
             chunks.append(str(delta))
             yield str(delta)
 
     output_text = "".join(chunks).strip()
-    event(trace_ctx, "stream.complete", {"chars": len(output_text)})
+    total_ms = int((time.time() - started_at) * 1000)
+    event(
+        trace_ctx,
+        "stream.complete",
+        {
+            "chars": len(output_text),
+            "first_token_ms": first_token_ms,
+            "total_ms": total_ms,
+            "model": model or "dynamic",
+        },
+    )
 
     # Persist run + memory
     created_at = datetime.now(timezone.utc).timestamp()

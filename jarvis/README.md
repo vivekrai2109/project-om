@@ -64,6 +64,24 @@ setx OPENAI_API_KEY "your-key-here"
 agenthub run "Update README with setup steps" --agent docs
 ```
 
+4. Start the Jarvis terminal shell:
+
+```bash
+agenthub shell
+```
+
+Windows popup shell:
+
+```bash
+agenthub shell-window
+```
+
+Workspace root popup launcher:
+
+```bash
+JARVIS Shell.cmd
+```
+
 ## Setup Guide
 
 ### Prerequisites
@@ -159,6 +177,9 @@ agenthub run "Update README with setup steps" --agent docs
 - `agenthub interview-drills --limit 10`
 - `agenthub run "task" --agent coder`
 - `agenthub run "task" --agent auto`
+- `agenthub shell`
+- `agenthub shell-window`
+- `JARVIS Shell.cmd`
 - `agenthub plan "task"`
 - `agenthub run-plan "task"`
 - `agenthub enqueue "task" --agent auto`
@@ -166,6 +187,7 @@ agenthub run "Update README with setup steps" --agent docs
 - `agenthub queue-status`
 - `agenthub web --host 127.0.0.1 --port 8000`
 - `agenthub desktop`
+- `agenthub desktop-classic`
 - `agenthub desktop-cinematic`
 - `agenthub backend-check`
 - `agenthub export-dataset --out data/finetune.jsonl`
@@ -176,6 +198,14 @@ agenthub run "Update README with setup steps" --agent docs
 - `agenthub record-approval <id> --note "why approved"`
 - `agenthub schedule-repo-health --interval 3600`
 - `agenthub maintenance --interval 3600 --cleanup-days 7`
+
+Inside the Jarvis shell, use:
+
+- `/status`
+- `/today`
+- `/voice`
+- `/omnira`
+- `/autonomy`
 
 ## Streaming
 
@@ -237,15 +267,58 @@ See `docs/JARVIS_LITE_MVP.md`, `docs/ROADMAP.md`, and `docs/PLATFORM_INVENTORY.m
 
 ## Cinematic Desktop Shell
 
-The repo now includes an experimental `PySide6 + QML` desktop path alongside the Tkinter prototype.
+The repo now includes a `PySide6 + QML` desktop shell as the primary Jarvis desktop experience, with the Tkinter prototype kept as a fallback.
 
 Run it with:
 
 ```bash
-agenthub desktop-cinematic
+agenthub desktop
+```
+
+If you want the older Tkinter prototype explicitly, run:
+
+```bash
+agenthub desktop-classic
 ```
 
 The current Qt shell is the first migration slice. It reuses the existing Jarvis Python core for backend checks, routing, streaming, and listen-state integration while beginning the move toward a more cinematic desktop experience.
+
+Current desktop behavior:
+
+- Jarvis opens in a voice-first Presence Mode by default instead of a diagnostic dashboard.
+- Operations, workflow trace, backend details, and approval details are hidden by default and shown only on demand, on approval gates, on errors, or in debug mode.
+- The default desktop surface centers the AI core/orb, compact status chips, minimal transcript, and floating voice controls.
+- Local voice commands can open or hide operations, show workflow or backend state, mute mic or speaker independently, interrupt a response, toggle listening, and enter or exit debug mode without sending those UI commands to OMNIRA.
+
+Desktop UI modes:
+
+- Presence: default, minimal, orb-first
+- Conversation: larger transcript preview, still minimal
+- Insight: visualization surface for cards, timelines, and result summaries
+- Operations: backend, model, memory, workflow, and tool-call visibility
+- Debug: developer-only diagnostics and internal runtime visibility
+- Approval: supervised-action view for explicit approval or rejection
+
+Jarvis state machine:
+
+- idle
+- listening
+- transcribing
+- thinking
+- speaking
+- executing
+- approval_required
+- muted
+- disconnected
+- error
+
+Each of these states drives the orb behavior, control surface emphasis, status chips, and visibility of runtime details in the cinematic shell.
+
+Interaction capture:
+
+- Jarvis now records structured local interaction records under `data/interactions/`.
+- These records capture transcript, intent, selected agent and model, workflow steps, final response, success or failure, approval requirement, and a `training_candidate` flag.
+- Jarvis does not auto-train models. The interaction record is only a safe local artifact for future OMNIRA training-data preparation.
 
 Voice-first operating target:
 

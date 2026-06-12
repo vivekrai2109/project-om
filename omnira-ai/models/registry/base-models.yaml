@@ -17,6 +17,12 @@ base_models:
     runtime: ollama
     status: placeholder
     notes: Local infrastructure and platform base model.
+  - id: qwen-reasoning-local
+    family: qwen
+    size: 7b
+    runtime: ollama
+    status: target-internal
+    notes: Local reasoning-first base model for orchestration, planning, and Jarvis self-development.
   - id: qwen-research-cloud
     family: qwen
     size: 14b

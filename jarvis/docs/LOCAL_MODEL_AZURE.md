@@ -1,31 +1,45 @@
-# Local Model on Azure (gpt-oss-20b)
+# Azure Model
 
-This guide assumes you want to run **gpt-oss-20b** on your own Azure GPU VM and connect Agent Hub via an OpenAI?compatible API.
+This guide is one self-hosted model-serving path for Jarvis. It assumes you want to run `gpt-oss-20b` on your own Azure GPU VM and expose it through an OpenAI-compatible API.
 
-## Why gpt-oss-20b
-- Open-weight reasoning model built for local deployment.
-- Available under the Apache 2.0 license.
-- Designed to run locally and in data centers.
+## Stack
+- Azure GPU VM
+- Docker plus NVIDIA Container Toolkit
+- vLLM server
+- Jarvis configured with `backend: local`
 
-## Summary of the stack
-- **Azure GPU VM** (NVIDIA GPU with sufficient VRAM)
-- **Docker + NVIDIA Container Toolkit**
-- **vLLM server** (OpenAI-compatible API)
-- **Agent Hub** configured with `backend: local`
+## Frontend
+- no frontend dependency
+- Jarvis desktop and web surfaces talk to the backend through the normal backend adapter
 
-## Step 1: Create Azure GPU VM (outline)
-1. Create an Azure VM with an NVIDIA GPU (A10/L4/A100?class or better).
+## Backend
+- Azure VM with NVIDIA GPU and drivers
+- CUDA runtime
+- Docker runtime
+- vLLM process listening on port `8000`
+
+## Jarvis
+- set `backend: local`
+- point `base_url` to the self-hosted vLLM endpoint
+- keep approvals, memory, and policy local to Jarvis
+
+## Models
+- base model: `gpt-oss-20b`
+- serving layer: `vLLM`
+- later path: fine-tuned variant for Jarvis workloads
+
+## Setup
+
+### 1. Create the VM
+1. Create an Azure VM with an NVIDIA GPU such as A10, L4, or better.
 2. Install NVIDIA drivers and CUDA.
 3. Install Docker and NVIDIA Container Toolkit.
 
-## Step 2: Run vLLM (OpenAI?compatible)
-Example (adjust to your VM):
+### 2. Run vLLM
 
 ```bash
-# Pull vLLM container
 docker pull vllm/vllm-openai:latest
 
-# Start server (example)
 docker run --gpus all -p 8000:8000 \
   vllm/vllm-openai:latest \
   --model <path-or-hf-repo>/gpt-oss-20b \
@@ -33,11 +47,10 @@ docker run --gpus all -p 8000:8000 \
 ```
 
 Notes:
-- Download the model weights from OpenAI?s open model release pages.
-- gpt-oss models are open?weight and are not served through the OpenAI API, so you must host them yourself.
+- Download the model weights from the relevant open model release source.
+- Open-weight models are not served through the OpenAI API by default, so you host them yourself.
 
-## Step 3: Configure Agent Hub
-Create a local config (example):
+### 3. Configure Jarvis
 
 ```yaml
 # config.local.yaml
@@ -61,13 +74,13 @@ Run:
 python -m agenthub run "Summarize this repo" --agent auto
 ```
 
-## Step 4: Validation checklist
+## Check
 - `agenthub list-agents` works
 - `agenthub run` calls succeed against your VM
 - Token usage appears in run logs
 
-## Next: make it ?your model?
+## Next
 - Collect your own task data
-- Fine?tune gpt-oss?20b (LoRA / QLoRA)
+- Fine-tune `gpt-oss-20b` with LoRA or QLoRA
 - Add evals to enforce your preferred style
 

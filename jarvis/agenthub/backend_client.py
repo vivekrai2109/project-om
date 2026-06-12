@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 import os
+import json
+import time
 from typing import Any, Iterable
 
 import httpx
 
 from .config import Config
+from .memory_control import load_memory_control_state
 from .models import get_model_for_agent
 
 
@@ -18,7 +21,7 @@ OMNIRA_MODEL_MAP = {
     "infra": "omnira-platform-qwen-7b-v0.1",
     "monitor": "omnira-platform-qwen-7b-v0.1",
     "release": "omnira-platform-qwen-7b-v0.1",
-    "planner": "omnira-prime-qwen-platform-routing",
+    "planner": "omnira-reasoning-qwen-7b-v0.1",
     "docs": "omnira-research-qwen-14b-v0.1",
     "research": "omnira-research-qwen-14b-v0.1",
     "data": "omnira-research-qwen-14b-v0.1",
@@ -27,6 +30,7 @@ OMNIRA_MODEL_MAP = {
 }
 
 OMNIRA_AGENT_MAP = {
+    "assistant-lite": "omnira-lite",
     "coder": "omnira-code",
     "infra": "omnira-platform",
     "monitor": "omnira-platform",
@@ -37,6 +41,29 @@ OMNIRA_AGENT_MAP = {
     "data": "omnira-research",
     "security": "omnira-shield",
     "qa": "omnira-code",
+}
+
+OMNIRA_COMPUTE_MODEL_MAP: dict[str, dict[str, str]] = {
+    "lean": {
+        "planner": "omnira-lite-qwen-3b-v0.1",
+        "docs": "omnira-lite-qwen-3b-v0.1",
+        "research": "omnira-lite-qwen-3b-v0.1",
+        "data": "omnira-lite-qwen-3b-v0.1",
+        "coder": "omnira-code-qwen-coder-7b-v0.1",
+        "qa": "omnira-code-qwen-coder-7b-v0.1",
+        "security": "omnira-shield-qwen-7b-v0.1",
+        "infra": "omnira-platform-qwen-7b-v0.1",
+        "monitor": "omnira-platform-qwen-7b-v0.1",
+        "release": "omnira-platform-qwen-7b-v0.1",
+    },
+    "balanced": dict(OMNIRA_MODEL_MAP),
+    "performance": dict(OMNIRA_MODEL_MAP),
+}
+
+COMPUTE_MODE_REQUEST_PROFILE: dict[str, dict[str, object]] = {
+    "lean": {"max_output_tokens": 384, "reasoning_effort": "low"},
+    "balanced": {"max_output_tokens": 1024, "reasoning_effort": "medium"},
+    "performance": {"max_output_tokens": 1536, "reasoning_effort": "high"},
 }
 
 
@@ -75,17 +102,141 @@ class OmniraResponseUsage:
 
 
 @dataclass
+class JarvisOMNIRAResponse:
+    reply_text: str = ""
+    speech_text: str = ""
+    state: str = "idle"
+    intent: str = ""
+    agent: str = ""
+    model: str = ""
+    provider: str = ""
+    confidence: float = 0.0
+    decision_path: list[str] = field(default_factory=list)
+    memory_hits: list[dict[str, Any] | str] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    workflow_trace: list[dict[str, Any]] = field(default_factory=list)
+    visualization: dict[str, Any] = field(default_factory=dict)
+    safety_flags: list[str] = field(default_factory=list)
+    approval_required: bool = False
+    risk_level: str = "low"
+    error: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class OmniraResponse:
     output_text: str
     created_at: float
     usage: OmniraResponseUsage
     model: str = ""
     agent: str = ""
+    provider: str = ""
+    response: JarvisOMNIRAResponse = field(default_factory=JarvisOMNIRAResponse)
 
 
 @dataclass
 class OmniraStreamEvent:
     delta: str
+    done: bool = False
+    model: str = ""
+    agent: str = ""
+    provider: str = ""
+    response: JarvisOMNIRAResponse = field(default_factory=JarvisOMNIRAResponse)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RoutingProfile:
+    model_name: str | None
+    max_output_tokens: int
+    reasoning_effort: str
+    compute_mode: str
+
+
+def _normalize_memory_hits(value: object) -> list[dict[str, Any] | str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any] | str] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append({str(key): item[key] for key in item})
+        elif item is not None:
+            normalized.append(str(item))
+    return normalized
+
+
+def _normalize_tool_calls(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append({str(key): item[key] for key in item})
+        elif item is not None:
+            normalized.append({"name": str(item), "status": "unknown"})
+    return normalized
+
+
+def _normalize_workflow_trace(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append({str(key): item[key] for key in item})
+        elif item is not None:
+            normalized.append({"step": str(item), "status": "ok", "detail": str(item)})
+    return normalized
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None and str(item).strip()]
+
+
+def normalize_omnira_response_payload(
+    payload: dict[str, Any] | None,
+    *,
+    fallback_reply_text: str = "",
+    fallback_model: str = "",
+    fallback_agent: str = "",
+    fallback_provider: str = "",
+) -> JarvisOMNIRAResponse:
+    raw = payload or {}
+    metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
+    reply_text = str(
+        raw.get("reply_text")
+        or raw.get("response")
+        or metadata.get("reply_text")
+        or fallback_reply_text
+        or ""
+    ).strip()
+    speech_text = str(raw.get("speech_text") or metadata.get("speech_text") or reply_text).strip()
+    state = str(raw.get("state") or metadata.get("state") or ("approval_required" if raw.get("approval_required") else "speaking" if reply_text else "idle")).strip()
+    return JarvisOMNIRAResponse(
+        reply_text=reply_text,
+        speech_text=speech_text,
+        state=state or "idle",
+        intent=str(raw.get("intent") or metadata.get("intent") or "").strip(),
+        agent=str(raw.get("agent") or metadata.get("agent") or fallback_agent or "").strip(),
+        model=str(raw.get("model") or metadata.get("model") or fallback_model or "").strip(),
+        provider=str(raw.get("provider") or metadata.get("provider") or fallback_provider or "").strip(),
+        confidence=max(0.0, min(1.0, float(raw.get("confidence") or metadata.get("confidence") or 0.0))),
+        decision_path=_normalize_string_list(raw.get("decision_path") or metadata.get("decision_path")),
+        memory_hits=_normalize_memory_hits(raw.get("memory_hits") or metadata.get("memory_hits")),
+        tool_calls=_normalize_tool_calls(raw.get("tool_calls") or metadata.get("tool_calls")),
+        workflow_trace=_normalize_workflow_trace(raw.get("workflow_trace") or metadata.get("workflow_trace")),
+        visualization=dict(raw.get("visualization") or metadata.get("visualization") or {}),
+        safety_flags=_normalize_string_list(raw.get("safety_flags") or metadata.get("safety_flags")),
+        approval_required=bool(raw.get("approval_required") if "approval_required" in raw else metadata.get("requires_approval") or metadata.get("approval_required") or False),
+        risk_level=str(raw.get("risk_level") or metadata.get("risk_level") or "low").strip() or "low",
+        error=(raw.get("error") if isinstance(raw.get("error"), dict) else metadata.get("error") if isinstance(metadata.get("error"), dict) else None),
+        metadata=dict(metadata),
+    )
 
 
 class OmniraModelsAPI:
@@ -127,12 +278,18 @@ class OmniraResponsesAPI:
                 "source": "jarvis",
                 "max_output_tokens": max_output_tokens,
                 "reasoning": reasoning or {},
+                "compute_mode": _current_compute_mode(),
+                "pinned_model": _current_pinned_model(),
+                "jarvis_contract_version": "1.0",
             },
         }
         if model:
             payload["preferred_model"] = model
         if preferred_agent:
             payload["preferred_agent"] = preferred_agent
+
+        if stream:
+            return self._stream_chat(payload, timeout=timeout)
 
         response = httpx.post(
             f"{normalize_omnira_base_url(self.cfg.base_url)}/chat",
@@ -141,7 +298,12 @@ class OmniraResponsesAPI:
         )
         response.raise_for_status()
         payload = response.json()
-        text = str(payload.get("response", ""))
+        normalized = normalize_omnira_response_payload(
+            payload,
+            fallback_model=str(model or ""),
+            fallback_agent=str(preferred_agent or ""),
+        )
+        text = normalized.reply_text
         usage = OmniraResponseUsage(
             input_tokens=max(1, len(user_text.split())),
             output_tokens=max(1, len(text.split())),
@@ -151,11 +313,48 @@ class OmniraResponsesAPI:
             return self._stream_text(text)
         return OmniraResponse(
             output_text=text,
-            created_at=0.0,
+            created_at=time.time(),
             usage=usage,
-            model=str(payload.get("model") or model or ""),
-            agent=str(payload.get("agent") or preferred_agent or ""),
+            model=normalized.model or str(model or ""),
+            agent=normalized.agent or str(preferred_agent or ""),
+            provider=normalized.provider,
+            response=normalized,
         )
+
+    def _stream_chat(self, payload: dict[str, Any], *, timeout: int) -> Iterable[OmniraStreamEvent]:
+        reply_parts: list[str] = []
+        with httpx.stream(
+            "POST",
+            f"{normalize_omnira_base_url(self.cfg.base_url)}/chat/stream",
+            json=payload,
+            timeout=timeout,
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                item = json.loads(line)
+                delta = str(item.get("delta") or "")
+                if delta:
+                    reply_parts.append(delta)
+                normalized = normalize_omnira_response_payload(
+                    item,
+                    fallback_reply_text="".join(reply_parts),
+                    fallback_model=str(item.get("model") or payload.get("preferred_model") or ""),
+                    fallback_agent=str(item.get("agent") or payload.get("preferred_agent") or ""),
+                    fallback_provider=str(item.get("provider") or ""),
+                )
+                yield OmniraStreamEvent(
+                    delta=delta,
+                    done=bool(item.get("done", False)),
+                    model=normalized.model,
+                    agent=normalized.agent,
+                    provider=normalized.provider,
+                    response=normalized,
+                    metadata=dict(item.get("metadata") or {}),
+                )
+                if item.get("done"):
+                    break
 
     def _stream_text(self, text: str) -> Iterable[OmniraStreamEvent]:
         if not text:
@@ -174,16 +373,76 @@ def is_openai_compatible_backend(backend: str) -> bool:
     return backend in OPENAI_COMPATIBLE_BACKENDS
 
 
-def resolve_model_name(agent_name: str, agent_model: str | None, cfg: Config, dynamic_routing: bool = False) -> str | None:
+def _current_compute_mode() -> str:
+    try:
+        return load_memory_control_state().compute_mode
+    except Exception:
+        return "balanced"
+
+
+def _current_pinned_model() -> str:
+    try:
+        return str(load_memory_control_state().pinned_model or "").strip()
+    except Exception:
+        return ""
+
+
+def build_routing_profile(
+    agent_name: str,
+    agent_model: str | None,
+    cfg: Config,
+    dynamic_routing: bool = False,
+    compute_mode: str | None = None,
+) -> RoutingProfile:
+    effective_compute_mode = str(compute_mode or _current_compute_mode() or "balanced").strip().lower() or "balanced"
+    pinned_model = _current_pinned_model()
+    request_profile = COMPUTE_MODE_REQUEST_PROFILE.get(effective_compute_mode, COMPUTE_MODE_REQUEST_PROFILE["balanced"])
     if agent_model:
-        return agent_model
+        return RoutingProfile(
+            model_name=agent_model,
+            max_output_tokens=int(request_profile["max_output_tokens"]),
+            reasoning_effort=str(request_profile["reasoning_effort"]),
+            compute_mode=effective_compute_mode,
+        )
+    if pinned_model:
+        return RoutingProfile(
+            model_name=pinned_model,
+            max_output_tokens=int(request_profile["max_output_tokens"]),
+            reasoning_effort=str(request_profile["reasoning_effort"]),
+            compute_mode=effective_compute_mode,
+        )
     if cfg.backend == "omnira":
         if dynamic_routing:
-            return None
-        return OMNIRA_MODEL_MAP.get(agent_name, "omnira-lite-qwen-3b-v0.1")
+            return RoutingProfile(
+                model_name=None,
+                max_output_tokens=int(request_profile["max_output_tokens"]),
+                reasoning_effort=str(request_profile["reasoning_effort"]),
+                compute_mode=effective_compute_mode,
+            )
+        model_map = OMNIRA_COMPUTE_MODEL_MAP.get(effective_compute_mode, OMNIRA_MODEL_MAP)
+        return RoutingProfile(
+            model_name=model_map.get(agent_name, "omnira-lite-qwen-3b-v0.1"),
+            max_output_tokens=int(request_profile["max_output_tokens"]),
+            reasoning_effort=str(request_profile["reasoning_effort"]),
+            compute_mode=effective_compute_mode,
+        )
     if is_openai_compatible_backend(cfg.backend):
-        return get_model_for_agent(agent_name, cfg.model)
-    return cfg.model
+        return RoutingProfile(
+            model_name=get_model_for_agent(agent_name, cfg.model),
+            max_output_tokens=min(int(cfg.max_output_tokens), int(request_profile["max_output_tokens"])),
+            reasoning_effort=str(request_profile["reasoning_effort"]),
+            compute_mode=effective_compute_mode,
+        )
+    return RoutingProfile(
+        model_name=cfg.model,
+        max_output_tokens=min(int(cfg.max_output_tokens), int(request_profile["max_output_tokens"])),
+        reasoning_effort=str(request_profile["reasoning_effort"]),
+        compute_mode=effective_compute_mode,
+    )
+
+
+def resolve_model_name(agent_name: str, agent_model: str | None, cfg: Config, dynamic_routing: bool = False) -> str | None:
+    return build_routing_profile(agent_name, agent_model, cfg, dynamic_routing=dynamic_routing).model_name
 
 
 def resolve_omnira_agent_name(agent_name: str, dynamic_routing: bool = False) -> str | None:

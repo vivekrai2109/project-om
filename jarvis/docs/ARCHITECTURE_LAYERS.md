@@ -1,23 +1,26 @@
 # Architecture (Layers)
 
-Below is a layered view of the agentic application:
+Below is a layered view of the current Jarvis operator platform:
 
 ```mermaid
 flowchart TB
-  subgraph Clients
-    UI[Web UI]
+  subgraph Experience
+    DESKTOP[Desktop Shell]
+    WEB[Local Web UI]
     CLI[CLI]
-    API[HTTP API]
+    VOICE[Voice Capture]
   end
 
-  subgraph AppLayer[Application Layer]
-    ORCH[Orchestrator]
+  subgraph Control[Control Layer]
+    ORCH[Jarvis Supervisor]
     PLAN[Planner]
     ROUTE[Router]
-    PERM[Tool Permissions]
+    APPROVAL[Approval Engine]
+    POLICY[Policy Engine]
   end
 
-  subgraph Agents[Specialist Agents]
+  subgraph Runtime[Agent Hub Runtime]
+    HANDOFF[Task Envelopes]
     CODER[Coder]
     INFRA[Infra]
     DOCS[Docs]
@@ -29,43 +32,61 @@ flowchart TB
     DATA[Data]
   end
 
-  subgraph Data[Data Layer]
+  subgraph Trust[Trust and State]
     MEM[Project Memory]
     RUNS[Run Logs]
     QUEUE[Queue]
     REG[Tool Registry]
     MODELS[Model Registry]
+    AUDIT[Audit Log]
+    PROFILE[Profiles]
   end
 
-  subgraph Model[Model Backend]
-    OPENAI[OpenAI API]
-    VLLM[vLLM + gpt-oss-20b]
+  subgraph Models[Model Platform]
+    LOCAL[Local or Self-Hosted Models]
+    OMNIRA[OMNIRA Endpoint]
+    EXT[External Fallback Models]
   end
 
-  UI --> ORCH
+  DESKTOP --> ORCH
+  WEB --> ORCH
   CLI --> ORCH
-  API --> ORCH
+  VOICE --> ORCH
 
   ORCH --> PLAN
   ORCH --> ROUTE
-  ORCH --> PERM
+  ORCH --> APPROVAL
+  ORCH --> POLICY
+  ORCH --> HANDOFF
 
-  ROUTE --> Agents
-  PLAN --> Agents
+  HANDOFF --> CODER
+  HANDOFF --> INFRA
+  HANDOFF --> DOCS
+  HANDOFF --> MON
+  HANDOFF --> QA
+  HANDOFF --> SEC
+  HANDOFF --> REL
+  HANDOFF --> RES
+  HANDOFF --> DATA
+  ROUTE --> HANDOFF
+  PLAN --> HANDOFF
 
   ORCH --> MEM
   ORCH --> RUNS
   ORCH --> QUEUE
-  PERM --> REG
+  POLICY --> REG
   ORCH --> MODELS
+  ORCH --> AUDIT
+  ORCH --> PROFILE
 
-  ORCH --> OPENAI
-  ORCH --> VLLM
+  ORCH --> LOCAL
+  ORCH --> OMNIRA
+  ORCH --> EXT
 ```
 
 Notes:
-- Orchestrator is the main control plane.
-- Router selects agents automatically when needed.
-- Planner produces multi-step task graphs.
-- Model backend can be OpenAI or local vLLM.
+- Jarvis Supervisor is the owner-facing control plane.
+- Specialist work should flow through task envelopes instead of ad hoc prompt chaining.
+- Policy and approvals are separate control points, not side effects hidden inside agents.
+- Local or self-hosted models are the preferred default, with OMNIRA or external providers used as configured.
 

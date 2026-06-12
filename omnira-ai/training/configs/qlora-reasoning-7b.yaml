@@ -1,0 +1,16 @@
+job_name: omnira-reasoning-qwen-7b-v0.1
+base_model: qwen-reasoning-local
+strategy: qlora
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+dataset_paths:
+  instruction: training/datasets/instruction
+  preference: training/datasets/preference
+  eval: training/datasets/eval
+output_dir: models/adapters/omnira-reasoning-qwen-7b-v0.1
+notes:
+  - Prioritize planning, orchestration, repo diagnosis, approval-aware reasoning, and self-development traces.
+  - Keep safety and bounded-autonomy eval gates mandatory before merge.

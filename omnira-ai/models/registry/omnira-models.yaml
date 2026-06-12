@@ -14,6 +14,11 @@ omnira_models:
     base_model: qwen-platform-local
     domain: platform
     status: target-internal
+  - id: omnira-reasoning-qwen-7b-v0.1
+    display_name: OMNIRA Reasoning 7B v0.1
+    base_model: qwen-reasoning-local
+    domain: planning-orchestration-self-development
+    status: target-internal
   - id: omnira-bharat-qwen-7b-v0.1
     display_name: OMNIRA Bharat 7B v0.1
     base_model: qwen-platform-local

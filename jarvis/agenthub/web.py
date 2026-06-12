@@ -23,6 +23,7 @@ from .interview import create_session, add_turn, list_sessions, load_session, se
 from .speech import get_microphone_config, get_capture_state, list_input_devices, record_microphone_clip
 from .voice import get_listen_state
 from .approval_queue import list_pending_approvals
+from .control_state import load_runtime_control_state
 from .runtime_actions import maybe_execute_runtime_action, approve_runtime_action, reject_runtime_action
 from .assistant_core import handle_assistant_core
 
@@ -1022,8 +1023,10 @@ def jarvis_state():
     mic = get_microphone_config()
     capture = get_capture_state()
     sessions = _load_interviews(limit=20)
+  control = load_runtime_control_state()
     return JSONResponse(
         {
+      "control": control.to_dict(),
             "listen": {"enabled": listen.enabled, "mode": listen.mode},
             "microphone": {
                 "device": mic.device,
