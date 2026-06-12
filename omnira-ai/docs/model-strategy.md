@@ -17,3 +17,11 @@ OMNIRA models are Qwen-derived fine-tuned models rather than scratch-trained mod
 2. Support local Qwen variants through Ollama.
 3. Fine-tune targeted OMNIRA models with QLoRA.
 4. Merge and self-host selected models through vLLM.
+
+## Reasoning-first priority
+
+The first model that should become real is `omnira-reasoning-qwen-7b-v0.1`.
+
+- It should power OMNIRA Prime orchestration and Jarvis self-development planning.
+- It should be trained on planning, repo reasoning, tool-routing, approval-aware execution, and self-improvement traces.
+- It should remain local-first through Ollama during bootstrap, then move to vLLM once the merged artifact is stable.

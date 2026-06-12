@@ -1,26 +1,41 @@
-# Jarvis Tauri Shell
+# Jarvis Shell
 
-This folder contains the new `Tauri + React` desktop shell for Jarvis.
+This app is the production desktop-shell path for Jarvis.
 
-## Role
+## Frontend
+- Tauri 2 shell
+- React 19
+- TypeScript
+- Vite
+- current scaffold is 2D UI first
+- target path is cinematic rendering with WebGL or WebGPU
 
-- richer visual shell for Jarvis as a holistic personal assistant and AI commander
-- thin UI over the existing Python Jarvis core and OMNIRA backend
-- voice-first design with a compact fallback terminal instead of a text-heavy desktop surface
+## Backend
+- talks to the Jarvis Python runtime over local HTTP today
+- expected endpoints include `/jarvis/state` and `/chat`
+- later path can add local WebSocket streaming for richer state and animation timing
 
-## Current State
+## Jarvis
+- Jarvis remains the control plane
+- approvals, memory, sessions, voice state, and orchestration stay in Python
+- this app should stay a presentation and interaction layer
 
-- React/Vite frontend scaffolded
-- Tauri configuration scaffolded
-- wired to the current Jarvis backend API (`/jarvis/state` and `/chat`)
+## Models
+- model routing stays behind Jarvis
+- OMNIRA, self-hosted models, and fallback providers should be invisible to the shell except through runtime state
 
-## Toolchain Gap
+## Current
+- React and Vite scaffold exists
+- Tauri config exists
+- basic backend API wiring exists
+- cinematic rendering stack is not integrated yet
 
-This machine currently has `node` and `npm`, but does **not** have the Rust toolchain (`cargo`, `rustc`).
+## Gap
+- Rust toolchain is not installed on this machine yet
+- `npm run dev` can be used for frontend work
+- `npm run tauri:dev` remains blocked until `cargo` and `rustc` are installed
 
-That means you can develop the frontend layer now, but native Tauri build/dev commands will not run until Rust is installed.
-
-## Commands
+## Run
 
 ```powershell
 npm install
@@ -34,16 +49,20 @@ npm install
 npm run tauri:dev
 ```
 
-## Backend Expectation
+## API
 
-The shell expects the Jarvis backend API to be available, defaulting to:
+Default backend URL:
 
 ```text
 http://127.0.0.1:8010
 ```
 
-Override with:
+Override:
 
 ```powershell
 $env:VITE_JARVIS_API_URL="http://127.0.0.1:8010"
 ```
+
+## Plan
+
+See `PLAN.md` in this folder for the implementation phases.

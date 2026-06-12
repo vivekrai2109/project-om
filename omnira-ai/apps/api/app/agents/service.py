@@ -35,7 +35,7 @@ class BaseAgent:
 
 
 AGENTS: dict[str, BaseAgent] = {
-    "omnira-prime": BaseAgent("omnira-prime", "Central orchestrator for mixed tasks.", ["memory", "rag"], "medium", "You are OMNIRA Prime, the orchestrator.", "omnira-platform-qwen-7b-v0.1"),
+    "omnira-prime": BaseAgent("omnira-prime", "Central orchestrator for mixed tasks.", ["memory", "rag"], "medium", "You are OMNIRA Prime, the orchestrator.", "omnira-reasoning-qwen-7b-v0.1"),
     "omnira-lite": BaseAgent("omnira-lite", "Fast personal assistant for daily tasks.", [], "low", "You are OMNIRA Lite, a fast personal assistant who is concise, helpful, and practical.", "omnira-lite-qwen-3b-v0.1"),
     "omnira-code": BaseAgent("omnira-code", "Coding and repository assistant.", ["filesystem", "github"], "medium", "You are OMNIRA Code, focused on software engineering tasks.", "omnira-code-qwen-coder-7b-v0.1"),
     "omnira-platform": BaseAgent("omnira-platform", "Platform, DevOps, Azure, Kubernetes, and Terraform assistant.", ["azure", "terraform", "kubernetes", "shell"], "high", "You are OMNIRA Platform, focused on cloud and platform operations.", "omnira-platform-qwen-7b-v0.1"),

@@ -41,6 +41,7 @@ $env:ENABLE_OLLAMA = "true"
 $env:OLLAMA_BASE_URL = "http://localhost:11434"
 $env:OLLAMA_DEFAULT_MODEL = "qwen2.5:7b"
 $env:OLLAMA_FAST_MODEL = "qwen2.5:3b"
+$env:OLLAMA_REASONING_MODEL = "qwen2.5:7b"
 ```
 
 The API keeps OMNIRA model names for routing while mapping them to a local Qwen model for Ollama execution.
@@ -50,6 +51,7 @@ The API keeps OMNIRA model names for routing while mapping them to a local Qwen 
 OMNIRA now supports a fast local tier for personal-assistant traffic.
 
 - `omnira-lite`, `omnira-bharat`, and `omnira-coach` can use `OLLAMA_FAST_MODEL` for lower latency.
+- `omnira-prime` and `omnira-reasoning-qwen-7b-v0.1` use `OLLAMA_REASONING_MODEL` with a larger context and output budget.
 - `omnira-code`, `omnira-platform`, `omnira-shield`, and `omnira-trade` use the default or family-specific 7B model path.
 - `omnira-research` keeps a larger output budget because it is the slowest, analysis-heavy path.
 
@@ -60,8 +62,10 @@ $env:OLLAMA_FAST_MODEL = "qwen2.5:3b"
 $env:OLLAMA_KEEP_ALIVE = "20m"
 $env:OLLAMA_DEFAULT_NUM_CTX = "4096"
 $env:OLLAMA_FAST_NUM_CTX = "2048"
+$env:OLLAMA_REASONING_NUM_CTX = "8192"
 $env:OLLAMA_DEFAULT_MAX_TOKENS = "512"
 $env:OLLAMA_FAST_MAX_TOKENS = "256"
+$env:OLLAMA_REASONING_MAX_TOKENS = "1024"
 $env:OLLAMA_RESEARCH_MAX_TOKENS = "768"
 ```
 

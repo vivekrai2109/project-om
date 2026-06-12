@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 
 from .config import data_dir
+from .secure_storage import read_text_file, write_json_file, write_text_file
 
 
 @dataclass
@@ -36,15 +37,14 @@ def memory_file(pid: str) -> Path:
 
 def load_memory(pid: str) -> str:
     p = memory_file(pid)
-    if p.exists():
-        return p.read_text(encoding="utf-8")
-    return ""
+    return read_text_file(p, default="")
 
 
 def append_memory(pid: str, text: str) -> None:
     p = memory_file(pid)
     if text.strip():
-        p.write_text((p.read_text(encoding="utf-8") if p.exists() else "") + "\n" + text.strip() + "\n", encoding="utf-8")
+        existing = read_text_file(p, default="")
+        write_text_file(p, existing + "\n" + text.strip() + "\n")
 
 
 def write_run(pid: str, record: RunRecord) -> Path:
@@ -52,5 +52,4 @@ def write_run(pid: str, record: RunRecord) -> Path:
     out_dir = data_dir() / "runs" / pid
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{ts}.json"
-    out_path.write_text(json.dumps(asdict(record), indent=2), encoding="utf-8")
-    return out_path
+    return write_json_file(out_path, asdict(record))

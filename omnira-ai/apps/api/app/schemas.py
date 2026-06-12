@@ -38,6 +38,14 @@ class ModelResponse(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ModelStreamEvent(BaseModel):
+    delta: str = ""
+    done: bool = False
+    model_used: str = ""
+    provider: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class RouteRequest(BaseModel):
     message: str
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -62,11 +70,23 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    reply_text: str = ""
+    speech_text: str = ""
+    state: str = "idle"
+    intent: str = ""
     model: str
     agent: str
     provider: str
+    confidence: float = 0.0
     decision_path: list[str] = Field(default_factory=list)
+    memory_hits: list[dict[str, Any] | str] = Field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    workflow_trace: list[dict[str, Any]] = Field(default_factory=list)
+    visualization: dict[str, Any] = Field(default_factory=dict)
     safety_flags: list[str] = Field(default_factory=list)
+    approval_required: bool = False
+    risk_level: str = "low"
+    error: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

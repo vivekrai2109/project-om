@@ -6,24 +6,28 @@
 - Queue worker: `agenthub/queue.py`.
 - CLI: Typer app in `agenthub/cli.py`.
 - Current desktop shell: Tkinter prototype in `agenthub/desktop.py`.
-- Experimental cinematic desktop shell: Qt/QML path in `agenthub/desktop_qt.py` and `agenthub/qml/Main.qml`.
+- Experimental desktop bridge shell: Qt/QML path in `agenthub/desktop_qt.py` and `agenthub/qml/Main.qml`.
+- Target cinematic shell: Tauri app in `apps/desktop-tauri/`.
 
 ## Storage
+- `data/state/`: owner session state, kill-switch state, and runtime control flags.
 - `data/runs/`: JSON run logs.
 - `data/memory/`: project memory summaries.
+- `data/vector/`: optional local vector indexes for retrieval when simple memory is insufficient.
 - `data/queue/`: pending/processing/done/failed tasks.
 - `data/proposals/`: proposal summaries, raw outputs, and patches.
 - `data/traces/`: JSONL traces for agent execution and handoffs.
 - `data/audit/`: user-visible action audit events.
 - `data/voice/`: local listen-state and future voice session artifacts.
 - `data/interviews/`: local interview coaching sessions and transcript turns.
+- on Windows, memory, learning, interaction, training-candidate, and run artifacts can be stored encrypted at rest through the local DPAPI-backed storage layer
 
 ## Config
 - `config.yaml`: backend, model, timeouts, retries.
 - `models.yaml`: per-agent model overrides.
 - `profiles.yaml`: user policy profiles for personal/work boundaries.
 - optional dependency group `voice`: live microphone capture via `sounddevice`.
-- optional dependency group `desktop`: cinematic desktop shell via `PySide6`.
+- optional dependency group `desktop`: bridge desktop shell via `PySide6`.
 
 ## API Endpoints (local)
 - `GET /` Web UI
@@ -67,6 +71,47 @@
 - Safety model: explicit approvals for risky actions, auditable runs, local-first storage
 - Naming split: repo/folder identity is Jarvis, while the internal Python package and CLI remain `agenthub` until a later controlled rename
 
+## Agentic Operator Architecture
+- Jarvis is the owner-facing operator and supervising control plane.
+- Agent Hub is the internal multi-agent runtime that executes specialist work.
+- Specialist agents should communicate through stable task envelopes instead of ad hoc prompt chaining.
+- Planning, delegation, tool execution, approval checks, and result review should remain separable stages.
+- High-risk domains such as finance, purchases, destructive changes, and sensitive work actions must pass through explicit owner approval gates.
+
+## First Mission
+- The first mission is Jarvis self-development inside this repo: coding, testing, bug fixing, evaluation, and supervised improvement.
+- Jarvis should use specialist sub-agents for implementation, QA, docs, security, and review work before broader consumer-style automation is prioritized.
+- Any self-generated code change should move through proposal, validation, approval, apply, and rollback stages.
+
+## Owner Control Model
+- owner or admin has unrestricted authority over approved code, model, memory, and policy surfaces
+- non-owner agents operate inside explicit policy boundaries even when acting autonomously
+- core policy, model-routing, and self-update mutations require owner or admin approval
+
+## Memory and Retrieval Model
+- short-term working state should stay in local runtime memory for active sessions
+- durable memory should live in structured local stores under `data/memory/`
+- vector retrieval should be optional and local-first under `data/vector/`
+- Jarvis should choose between direct file context, durable memory, vector retrieval, or live tool calls by task type rather than forcing vector search everywhere
+- owner controls should govern whether Jarvis stores memory, captures learning traces, records observed usage, or prepares training candidates
+- internet knowledge acquisition should be explicit and owner-visible rather than silent background crawling
+- privacy status should report whether memory, learning, observation capture, profile learning, and internet learning are enabled
+- privacy status should also report active internet-learning domains and the current compute mode
+- owner should be able to set compute mode to `lean`, `balanced`, or `performance`
+- owner should be able to set, add, and remove owner-approved internet-learning domains without reopening unsafe categories
+- local-first storage is in place now; Windows local artifact encryption is available through DPAPI-backed storage for core memory and learning artifacts
+
+## Presence and Input Model
+- Jarvis should support always-available owner interaction through voice-first capture
+- camera or visual-presence inputs may be added for owner-aware interaction, state detection, and future multimodal workflows
+- presence inputs must stay governed by visible state, consent, and owner controls
+
+## Stop and Kill Controls
+- Jarvis must expose `start`, `stop`, `pause`, and `kill` controls through terminal commands
+- Jarvis should expose owner-approved spoken stop and pause commands through the voice path
+- kill-switch state must be global, immediate, auditable, and able to halt active automation loops
+- compute mode should affect actual model routing and max output token budgets, not just status reporting
+
 ## Voice-Centric Operating Model
 - Jarvis is voice-primary at the desktop surface.
 - Speech is the default command path; typing is a fallback channel.
@@ -76,30 +121,31 @@
 
 ## Desktop UI Direction
 - The current Tkinter shell is a functional prototype only. It is suitable for control panels and basic live status, but it is not the long-term rendering layer for a cinematic Jarvis experience.
-- Recommended primary path: `PySide6 + QML` for the production desktop shell.
-- Recommended fallback/high-ceiling alternative: `Tauri + React` with Canvas/WebGL for a heavier visual stack.
-- Decision rationale: Jarvis already has a working Python core, so `PySide6 + QML` keeps voice, orchestration, OMNIRA backend routing, memory, and local tooling in the same runtime while materially upgrading animation, compositing, transitions, and scene control.
+- Recommended primary path: `Tauri + React + WebGL/WebGPU` for the production desktop shell.
+- Recommended bridge path: keep the existing Qt/QML shell only as a transition surface while the production shell matures.
+- Decision rationale: the cinematic target needs higher-end motion, shader effects, depth treatment, audio-reactive rendering, and frontend iteration speed than the Qt bridge should own long term.
 - Architectural boundary: the desktop shell should become a thin presentation layer over the existing Python control plane rather than absorbing orchestration logic.
 
 ## Cinematic UI Requirements
 - full-screen scene composition instead of admin-style panels
 - layered motion states for idle, listening, thinking, speaking, and warning
 - animated voice visualizers driven by live microphone state
-- glass, glow, depth, and scan-line effects that require stronger rendering than Tkinter provides
+- glass, glow, depth, shader, and scan-line effects that require stronger rendering than Tkinter provides
 - state-driven transitions between conversation, approval, session review, and system status surfaces
 - future support for a central animated assistant core instead of static box layout
 
 ## Desktop Migration Shape
 - Phase 1: keep `agenthub/desktop.py` as the working prototype for local testing
 - Phase 2: extract a stable desktop-facing service boundary for conversation send, stream, session load, backend status, microphone state, and voice controls
-- Phase 3: build a new `PySide6 + QML` shell against that boundary
-- Phase 4: retire the Tkinter shell after feature parity for voice, sessions, streaming, and approvals
-- Phase 5: evaluate whether a later `Tauri + React/WebGL` shell is justified for even richer cinematic rendering
+- Phase 3: keep the Qt/QML shell as a bridge implementation for state and API validation
+- Phase 4: build the production `Tauri + React + WebGL/WebGPU` shell against that boundary
+- Phase 5: retire the Tkinter shell after feature parity for voice, sessions, streaming, and approvals
+- Phase 6: demote or retire the Qt bridge once the Tauri shell is stable for daily use
 
 ## Current Cinematic Shell Slice
-- `agenthub desktop-cinematic` starts the first `PySide6 + QML` shell.
+- `agenthub desktop-cinematic` starts the current bridge shell.
 - The current Qt bridge reuses existing backend checks, router-based agent selection, streaming responses, microphone status, and listen-state persistence.
-- The current QML scene now includes voice capture controls, live listen state, session sync, pending approvals, and approval history, but it still needs further reduction of text-first interaction to fully meet the voice-centric target.
+- The current QML scene now includes voice capture controls, live listen state, session sync, pending approvals, and approval history, but it remains a bridge path rather than the final cinematic surface.
 
 ## Policy Model
 - user profile boundaries are defined in `profiles.yaml`
@@ -123,6 +169,13 @@
 - `openai`: OpenAI API client.
 - `local`: OpenAI-compatible server (vLLM).
 - `omnira`: reserved backend mode for the user's OMNIRA assistant model, routed through the shared backend adapter.
+
+## Own-Model-First Strategy
+- All inference paths should flow through a single backend abstraction so routing policy can change without touching CLI, desktop, or orchestration surfaces.
+- Jarvis should increasingly default to self-hosted or locally served models for routing, memory extraction, summarization, and routine planning.
+- External providers should remain available as fallback or evaluation paths, not as the permanent center of the system.
+- Each run should record the selected model, token or usage counts, latency, fallback reason, and outcome quality signal when available.
+- Fine-tuning and evaluation workflows should consume approved local traces rather than raw unrestricted activity.
 
 ## OMNIRA Integration Contract
 - The runtime backend selection is centralized in `agenthub/backend_client.py`.

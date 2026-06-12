@@ -2,14 +2,41 @@
 
 ## Decision
 
-Jarvis should move from the current Tkinter prototype to a `PySide6 + QML` desktop shell.
+Jarvis should use `Tauri + React + WebGL/WebGPU` as the production cinematic shell.
 
-This is the best near-term choice because:
-- Jarvis is already a Python-first runtime
-- the assistant core, voice stack, memory, and OMNIRA adapter already live in Python
-- QML gives a much stronger animation and composition system than Tkinter without forcing a full backend rewrite
+This is the best fit for an industry-grade cinematic assistant because it gives Jarvis:
+- stronger shader and particle rendering
+- better depth, parallax, and layered motion
+- higher frontend iteration speed
+- easier use of advanced web animation and 3D libraries
+- a cleaner path to a living assistant presence instead of a utility dashboard
 
-`Tauri + React/WebGL` remains the stronger long-term option only if the visual target becomes much more cinematic than a native Qt scene can comfortably provide.
+`PySide6 + QML` should remain only as a bridge path while the production shell matures.
+
+## Frontend
+- Tauri 2 desktop shell
+- React 19 + TypeScript + Vite
+- React Three Fiber over Three.js for the assistant core scene
+- WebGL first, with WebGPU adoption when the renderer path is ready
+- Motion library for transitions and choreography
+- custom shader pipeline for glow, pulse, scan, particles, and ambient depth
+- Web Audio driven visual response for live microphone activity
+
+## Backend
+- Python Jarvis core remains the control plane
+- local HTTP or WebSocket bridge between shell and Jarvis runtime
+- backend owns sessions, approvals, memory, orchestration, and model calls
+- frontend remains a presentation and interaction layer, not a business-logic layer
+
+## Jarvis
+- owns conversation state, agent routing, approvals, voice controls, and system status
+- exposes stable UI-facing contracts for stream updates, session sync, approval prompts, and voice state
+- keeps OMNIRA and model routing behind the backend adapter
+
+## Models
+- model providers do not decide UI state
+- UI reacts to runtime state, not vendor-specific responses
+- voice and response timing can animate differently by task class or confidence, but the control source remains Jarvis
 
 ## Why Tkinter Stops Short
 
@@ -20,33 +47,21 @@ The current shell in `agenthub/desktop.py` can support:
 
 It cannot comfortably support:
 - cinematic compositing
-- layered transparency and blur
-- richer transition choreography
-- high-fidelity radial HUD systems
-- shader-style effects and fluid scene motion
+- strong transparency, blur, and glow pipelines
+- shader-driven scenes
+- audio-reactive 3D motion
+- layered camera depth and parallax systems
 
-## Recommended Architecture
+## Why Tauri Wins
 
-Jarvis should be split into two layers:
+Compared with the Qt bridge, Tauri plus a modern web rendering stack gives Jarvis:
+- better access to advanced animation libraries
+- better access to 3D scene tooling
+- easier shader iteration
+- stronger hiring and contributor familiarity
+- a clearer path to a premium cinematic product surface
 
-### 1. Jarvis Core
-- Python runtime
-- voice and microphone control
-- backend routing and OMNIRA integration
-- session and memory persistence
-- orchestration, approvals, and task execution
-
-### 2. Jarvis Shell
-- `PySide6 + QML`
-- scene rendering
-- animated conversation surfaces
-- voice-state visualization
-- approval overlays
-- desktop interaction controls
-
-The shell should call the Python core through a thin application boundary, not embed business logic in UI files.
-
-## Scene System
+## State
 
 The cinematic shell should be built around explicit assistant states:
 - `boot`
@@ -56,6 +71,7 @@ The cinematic shell should be built around explicit assistant states:
 - `speaking`
 - `approval_required`
 - `warning`
+- `error`
 
 Each state should change:
 - color treatment
@@ -64,30 +80,41 @@ Each state should change:
 - central-core animation
 - side-panel visibility and emphasis
 
-## Core Visual Language
+## Visual System
 
 The new UI should move away from dashboard boxes and toward:
 - one central assistant-core visual anchor
 - radial or orbital information layers
-- edge-mounted secondary panels
+- cinematic depth and parallax
 - low-text high-signal status chips
+- edge-mounted secondary panels
 - motion-led feedback instead of static labels
 
-## Migration Steps
+## Animation Stack
 
-1. Stabilize a desktop-facing interface in Python for message send, response stream, backend status, session list, microphone state, listen mode, and TTS control.
-2. Keep the current Tkinter shell operational during the migration.
-3. Build a minimal `PySide6 + QML` shell that supports boot, idle, and conversation streaming.
-4. Add voice-state visuals and approval overlays.
-5. Port session browsing and system diagnostics.
-6. Remove the Tkinter shell only after parity for daily use.
+Recommended rendering and motion stack:
+- Tauri 2
+- React 19
+- TypeScript
+- Vite
+- Three.js
+- React Three Fiber
+- shader materials for pulse, glow, scan, and particle fields
+- Motion or Framer Motion for 2D transitions
+- Web Audio analysis for waveform and orb response
 
-## When To Choose Tauri Instead
+## Migration
 
-Switch to `Tauri + React/WebGL` if Jarvis later needs:
-- heavy custom motion design
-- 3D or shader-driven scenes
-- browser-grade rendering libraries
-- rapid visual experimentation by frontend-focused contributors
+1. Stabilize a desktop-facing interface in Python for message send, response stream, backend status, session list, microphone state, listen mode, approvals, and TTS control.
+2. Keep Tkinter and Qt paths available only as temporary bridge shells.
+3. Build the Tauri shell with boot, idle, and conversation streaming.
+4. Add audio-reactive visuals and approval overlays.
+5. Add session browsing, insights, and diagnostics surfaces.
+6. Retire Tkinter after parity for daily use.
+7. Retire or demote the Qt bridge once the Tauri shell is stable.
 
-If that happens, keep the same Jarvis Python core and expose it through a local API or local WebSocket bridge.
+Implementation detail for the Tauri app lives in `apps/desktop-tauri/PLAN.md`.
+
+## Scope Rule
+
+"4D" should be treated as a cinematic product goal, not a literal rendering requirement. The implementation target is a layered 2D and 3D assistant presence with depth, motion, lighting, parallax, and audio-reactive behavior.

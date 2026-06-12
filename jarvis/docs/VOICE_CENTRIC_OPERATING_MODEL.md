@@ -77,9 +77,53 @@ The desktop shell should de-emphasize:
 ## Current Direction
 
 Current implementation direction in this repo:
-- `PySide6 + QML` cinematic shell as the production desktop path
+- `Tauri + React + WebGL/WebGPU` cinematic shell as the production desktop path
+- `PySide6 + QML` only as a temporary bridge shell
 - Python Jarvis core for routing, streaming, approvals, memory, sessions, and backend adapters
 - OMNIRA remains the external model core behind the assistant shell
+
+## Current Desktop Modes
+
+- Presence Mode: orb-first, minimal transcript, minimal chips, no operations panel by default
+- Conversation Mode: larger transcript and response preview with the same clean shell
+- Insight Mode: compact visualization surface for cards, timelines, comparisons, memory summaries, and command results
+- Operations Mode: backend status, active agent and model, voice status, memory summary, workflow trace, and tool-call visibility
+- Debug Mode: developer-facing visibility for internal state and runtime diagnostics
+- Approval Mode: explicit supervised-action surface with approve or reject actions
+
+## Current State Machine
+
+- idle
+- listening
+- transcribing
+- thinking
+- speaking
+- executing
+- approval_required
+- muted
+- disconnected
+- error
+
+The cinematic orb, chips, transcript emphasis, and operations drawer all derive from this single state machine.
+
+## Hidden-By-Default Rule
+
+The operations panel should not be a permanent dashboard.
+
+It opens only when:
+- the user explicitly requests it
+- an approval gate is reached
+- an error occurs
+- debug mode is enabled
+- a long-running workflow genuinely needs visibility
+
+This keeps Jarvis feeling like a spoken presence instead of a developer console.
+
+## Learning Capture Flow
+
+Jarvis now captures a lightweight local interaction record for each completed or failed turn. The record includes transcript, detected intent, selected agent and model, workflow steps, final response, success or failure, approval state, and a `training_candidate` flag.
+
+This is a local-first preparation path for future OMNIRA training data. Jarvis does not automatically retrain, fine-tune, or adapt base models from these records.
 
 ## Near-Term Gaps
 

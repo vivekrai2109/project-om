@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+import json
 import os
 import re
 import shutil
+import subprocess
+import sys
+import time
 import webbrowser
 from urllib.parse import quote_plus
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from .approval_queue import create_pending_approval, list_pending_approvals, resolve_pending_approval
+from .config import data_dir, load_config
 from .policies import evaluate_path_access, evaluate_tool_access
 
 
@@ -32,6 +40,10 @@ def maybe_execute_runtime_action(
     normalized = " ".join(task.strip().split())
     if not normalized:
         return RuntimeActionResult(False)
+
+    omnira_result = _maybe_handle_omnira_runtime_action(normalized, project_path)
+    if omnira_result.handled:
+        return omnira_result
 
     web_query = _match_web_search(normalized)
     if web_query:
@@ -210,3 +222,181 @@ def _find_files(root: Path, query: str) -> list[str]:
         if path.is_file() and lowered in path.name.lower():
             matches.append(str(path))
     return sorted(matches)
+
+
+def _maybe_handle_omnira_runtime_action(task: str, project_path: str) -> RuntimeActionResult:
+    normalized = " ".join(task.strip().lower().split())
+    if re.match(r"^start\s+omnira(\s+(backend|api|server))?$", normalized, flags=re.IGNORECASE):
+        return _start_omnira_backend(project_path)
+    if re.match(r"^stop\s+omnira(\s+(backend|api|server))?$", normalized, flags=re.IGNORECASE):
+        return _stop_omnira_backend()
+    if re.match(r"^restart\s+omnira(\s+(backend|api|server))?$", normalized, flags=re.IGNORECASE):
+        stop_result = _stop_omnira_backend()
+        start_result = _start_omnira_backend(project_path)
+        return RuntimeActionResult(True, "\n".join([part for part in [stop_result.message, start_result.message] if part]), "omnira-restart")
+    if re.match(r"^omnira(\s+backend)?\s+status$", normalized, flags=re.IGNORECASE):
+        return _omnira_backend_status()
+    return RuntimeActionResult(False)
+
+
+def _omnira_runtime_state_path() -> Path:
+    path = data_dir() / "state" / "omnira_runtime.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _read_omnira_runtime_state() -> dict[str, object]:
+    path = _omnira_runtime_state_path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+
+
+def _write_omnira_runtime_state(payload: dict[str, object]) -> None:
+    _omnira_runtime_state_path().write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
+
+
+def _clear_omnira_runtime_state() -> None:
+    path = _omnira_runtime_state_path()
+    if path.exists():
+        path.unlink()
+
+
+def _workspace_root(project_path: str) -> Path:
+    project = Path(project_path).resolve()
+    if project.name.lower() == "jarvis":
+        return project.parent
+    return project
+
+
+def _omnira_api_dir(project_path: str) -> Path:
+    return _workspace_root(project_path) / "omnira-ai" / "apps" / "api"
+
+
+def _omnira_bind_settings() -> tuple[str, int, str]:
+    cfg = load_config()
+    parsed = urlparse(cfg.base_url or "http://127.0.0.1:8001")
+    scheme = parsed.scheme or "http"
+    host = parsed.hostname or "127.0.0.1"
+    port = int(parsed.port or (443 if scheme == "https" else 80))
+    return host, port, f"{scheme}://{host}:{port}/health"
+
+
+def _omnira_http_health() -> tuple[bool, str]:
+    _, _, health_url = _omnira_bind_settings()
+    try:
+        with urlopen(health_url, timeout=5) as response:  # nosec B310 local owner-controlled health probe
+            return response.status == 200, f"GET {health_url} -> {response.status}"
+    except Exception as exc:
+        return False, f"GET {health_url} failed: {exc}"
+
+
+def _pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True, check=False)
+            return str(pid) in result.stdout
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _start_omnira_backend(project_path: str) -> RuntimeActionResult:
+    online, detail = _omnira_http_health()
+    if online:
+        return RuntimeActionResult(True, f"OMNIRA backend is already online. {detail}", "omnira-start")
+    api_dir = _omnira_api_dir(project_path)
+    if not api_dir.exists():
+        return RuntimeActionResult(True, f"OMNIRA API directory not found: {api_dir}", "omnira-start")
+    host, port, _ = _omnira_bind_settings()
+    env = os.environ.copy()
+    env.setdefault("ENABLE_OLLAMA", "false")
+    pid = _launch_omnira_process(api_dir, host, port, env)
+    _write_omnira_runtime_state(
+        {
+            "pid": pid,
+            "host": host,
+            "port": port,
+            "api_dir": str(api_dir),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_by": "jarvis_runtime_action",
+        }
+    )
+    for _ in range(10):
+        time.sleep(0.3)
+        online, detail = _omnira_http_health()
+        if online:
+            return RuntimeActionResult(True, f"Started OMNIRA backend on {host}:{port}. {detail}", "omnira-start")
+    return RuntimeActionResult(True, f"Started OMNIRA backend process with pid {pid}. Health check is still pending.", "omnira-start")
+
+
+def _launch_omnira_process(api_dir: Path, host: str, port: int, env: dict[str, str]) -> int:
+    if os.name == "nt":
+        command = (
+            f"$env:ENABLE_OLLAMA='{env.get('ENABLE_OLLAMA', 'false')}'; "
+            f"$p = Start-Process -FilePath '{sys.executable}' "
+            f"-ArgumentList '-m','uvicorn','app.main:app','--host','{host}','--port','{port}' "
+            f"-WorkingDirectory '{str(api_dir)}' -WindowStyle Hidden -PassThru; "
+            "$p.Id"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return int((result.stdout or "").strip().splitlines()[-1])
+    process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", host, "--port", str(port)],
+        cwd=str(api_dir),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return int(process.pid)
+
+
+def _stop_omnira_backend() -> RuntimeActionResult:
+    state = _read_omnira_runtime_state()
+    pid = int(state.get("pid") or 0)
+    if pid > 0 and _pid_is_running(pid):
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, text=True, check=False)
+            else:
+                os.kill(pid, 15)
+        except Exception as exc:
+            return RuntimeActionResult(True, f"Failed to stop OMNIRA backend pid {pid}: {exc}", "omnira-stop")
+        _clear_omnira_runtime_state()
+        return RuntimeActionResult(True, f"Stopped OMNIRA backend process {pid}.", "omnira-stop")
+    online, detail = _omnira_http_health()
+    if online:
+        return RuntimeActionResult(True, f"OMNIRA backend is online but not tracked by Jarvis, so I did not force-stop it. {detail}", "omnira-stop")
+    _clear_omnira_runtime_state()
+    return RuntimeActionResult(True, "OMNIRA backend is already offline.", "omnira-stop")
+
+
+def _omnira_backend_status() -> RuntimeActionResult:
+    state = _read_omnira_runtime_state()
+    online, detail = _omnira_http_health()
+    pid = int(state.get("pid") or 0)
+    pid_status = "running" if pid and _pid_is_running(pid) else "not tracked"
+    host, port, _ = _omnira_bind_settings()
+    lines = [
+        f"OMNIRA backend is {'online' if online else 'offline'}.",
+        f"Endpoint: {host}:{port}.",
+        f"Tracked pid: {pid or 'none'} ({pid_status}).",
+        f"Health: {detail}",
+    ]
+    if state.get("started_at"):
+        lines.append(f"Started at: {state['started_at']}")
+    return RuntimeActionResult(True, "\n".join(lines), "omnira-status")

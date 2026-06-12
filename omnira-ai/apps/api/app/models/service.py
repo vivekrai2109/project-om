@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from app.config import get_settings
 from app.models.providers import (
     BaseModelProvider,
@@ -7,7 +9,7 @@ from app.models.providers import (
     OllamaProvider,
     ProviderUnavailableError,
 )
-from app.schemas import ModelRequest, ModelResponse
+from app.schemas import ModelRequest, ModelResponse, ModelStreamEvent
 
 
 MODEL_CATALOG: tuple[dict[str, str], ...] = (
@@ -28,6 +30,12 @@ MODEL_CATALOG: tuple[dict[str, str], ...] = (
         "family": "OMNIRA Platform",
         "role": "platform",
         "description": "Platform, cloud, DevOps, and infrastructure specialist.",
+    },
+    {
+        "id": "omnira-reasoning-qwen-7b-v0.1",
+        "family": "OMNIRA Reasoning",
+        "role": "planning-orchestration",
+        "description": "Local reasoning-first model for planning, orchestration, and Jarvis self-development.",
     },
     {
         "id": "omnira-bharat-qwen-7b-v0.1",
@@ -94,3 +102,14 @@ class ModelService:
             fallback.metadata["requested_provider"] = selected_provider
             fallback.safety_flags.append("provider-fallback")
             return fallback
+
+    def stream_generate(self, request: ModelRequest, provider_name: str | None = None) -> Iterator[ModelStreamEvent]:
+        selected_provider = provider_name or self.default_provider
+        provider = self.providers[selected_provider]
+        try:
+            yield from provider.stream_generate(request)
+        except ProviderUnavailableError as error:
+            for event in self.providers["mock"].stream_generate(request):
+                event.metadata["fallback_reason"] = str(error)
+                event.metadata["requested_provider"] = selected_provider
+                yield event

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .backend_client import create_openai_client, resolve_model_name, resolve_omnira_agent_name
+from .backend_client import build_routing_profile, create_openai_client, resolve_omnira_agent_name
 from .config import load_config
 from .agents import AgentProfile
 from datetime import datetime, timezone
@@ -66,7 +66,8 @@ def run_task(
     dynamic_routing: bool = False,
 ) -> str:
     cfg = load_config()
-    model = resolve_model_name(agent.name, agent.model, cfg, dynamic_routing=dynamic_routing)
+    routing_profile = build_routing_profile(agent.name, agent.model, cfg, dynamic_routing=dynamic_routing)
+    model = routing_profile.model_name
     preferred_agent = resolve_omnira_agent_name(agent.name, dynamic_routing=dynamic_routing) if cfg.backend == "omnira" else None
 
     # Lazy init so non-API commands (e.g., list-agents) don't require a key.
@@ -100,8 +101,8 @@ def run_task(
                         response = client.responses.create(
                             model=model,
                             input=request_input,
-                            max_output_tokens=cfg.max_output_tokens,
-                            reasoning={"effort": cfg.reasoning_effort},
+                            max_output_tokens=routing_profile.max_output_tokens,
+                            reasoning={"effort": routing_profile.reasoning_effort},
                             timeout=cfg.request_timeout_s,
                             preferred_agent=preferred_agent,
                         )
@@ -109,8 +110,8 @@ def run_task(
                         response = client.responses.create(
                             model=model,
                             input=request_input,
-                            max_output_tokens=cfg.max_output_tokens,
-                            reasoning={"effort": cfg.reasoning_effort},
+                            max_output_tokens=routing_profile.max_output_tokens,
+                            reasoning={"effort": routing_profile.reasoning_effort},
                             timeout=cfg.request_timeout_s,
                         )
                 last_err = None
